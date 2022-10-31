@@ -16,11 +16,11 @@ Below is information on each column:
     - *x* - longitude in NAD83 (EPSG 4269)
     - *y* - latitude in NAD83  
     - *Forest_Age* - Forest age class (1-5):    
-        - 5-16 years   
-        - 17-25 years   
-        - 26-39 years   
-        - 40-65 years   
-        - 66+ years        
+            - 5-16 years   
+            - 17-25 years   
+            - 26-39 years   
+            - 40-65 years   
+            - 66+ years        
     - *CHM* - Mean height (m) from canopy height model   
     - *Max_Height* - Maximum height (m)   
     - *Rugosity* - Stdev in height from 15m moving windows   
