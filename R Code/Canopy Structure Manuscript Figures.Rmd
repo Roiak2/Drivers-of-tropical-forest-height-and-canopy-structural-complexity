@@ -2269,7 +2269,7 @@ b <- CSC %>%
            )+
   scale_x_continuous(breaks=seq(-65.8165,-65.8145,0.001))+
   scale_y_continuous(breaks=seq(18.322,18.324,0.001))+
-  labs(color="Top Rugosity (m)")+
+  labs(color="Canopy Rugosity (m)")+
   theme(plot.title=element_blank(),
         axis.title = element_blank(),
         axis.text.x = element_text(size=15),
@@ -2305,7 +2305,7 @@ annotate_figure(Map2)
 
 
 #Image for top panel
-c <- readPNG(paste0(local_path,"/Figures/CSC Manuscript 1e.png")) #loading image
+c <- readPNG(paste0(local_path,"/Figures/CSC Manuscript 1f.png")) #loading image
 
 #turn to ggplot item
 c <- CSC %>%
