@@ -20,17 +20,17 @@ Below is information on each column:
         - 17-25 years 
         - 26-39 years 
         - 40-65 years 
-        - 66+ years 
-    - *CHM* - Mean height (m) from canopy height model 
-    - *Max_Height* - Maximum height (m) 
-    - *Rugosity* - Stdev in height from 15m moving windows 
-    - *MAP* - Mean annual precipitation (mm/year) from PRISM 
-    - *Wind_Binary* - Protected (0) vs. exposed (1)  
-    - *Elev_Mean* - Mean elevation (m) from USGS DEM 
-    - *Slope* - Mean slope (in degrees) 
-    - *Soil* - Soil type (e.g. volcanic vs. limestone) from USGS  
-    - *Hugo/Georges exposure* - Mean exposure from 0-1 to hurricanes Hugo (1989) and Georges (1998) from Boose et al., (2004)  
-    - *AWS_mean* - Available water storage in soils from gSSURGO 
+        - 66+ years    
+    - *CHM* - Mean height (m) from canopy height model   
+    - *Max_Height* - Maximum height (m)   
+    - *Rugosity* - Stdev in height from 15m moving windows   
+    - *MAP* - Mean annual precipitation (mm/year) from PRISM   
+    - *Wind_Binary* - Protected (0) vs. exposed (1)    
+    - *Elev_Mean* - Mean elevation (m) from USGS DEM   
+    - *Slope* - Mean slope (in degrees)   
+    - *Soil* - Soil type (e.g. volcanic vs. limestone) from USGS    
+    - *Hugo/Georges exposure* - Mean exposure from 0-1 to hurricanes Hugo (1989) and Georges (1998) from Boose et al., (2004)    
+    - *AWS_mean* - Available water storage in soils from gSSURGO   
 
 
 ## Sharing/access Information
