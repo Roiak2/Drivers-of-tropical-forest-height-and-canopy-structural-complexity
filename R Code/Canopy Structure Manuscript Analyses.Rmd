@@ -1,0 +1,360 @@
+---
+title: "Canopy Structure Manuscript Analyses"
+author: "Roí Ankori-Karlinsky"
+date: "5/9/2022"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+    theme: journal
+    fig_width: 9
+    fig_height: 8
+---
+
+
+```{r setup, include=FALSE,echo=FALSE}
+
+# load packages 
+
+#Basic
+library(tidyverse) # Grammar for data manipulation
+library(parallel) # mclapply for multicore processing
+library(vegan)
+
+#Spatial analysis
+library(sp) #provides object oriented classes for spatial data in R 
+library(sf) #similar to sp
+library(rgdal) # raster analysis
+library(raster) #provides classes and methods for raster datasets
+library(spdplyr) #spatial data manipulation
+
+#Data checking
+library(naniar) # Visualization of missing values
+library(Amelia) # Teting missing columns
+library(corrplot) #correlation plots
+
+#Random Forest
+library(randomForestSRC) # random forests for survival, regression and
+library(pdp) #partial dependence plots
+library(randomForest) #random forest
+library(randomForestExplainer) #unpacking RF results
+library(pre) #Interactions between predictors
+library(iml) #Interactions between predictors
+
+# Visualization
+library(ggRandomForests) # ggplot2 random forest figures
+library(gridExtra) # allows plotting of multiple ggplots in one
+library(grid) #same as above
+library(colorRamps) # Colors for graphing
+library(RColorBrewer) # Colors for graphing
+library(cowplot) #putting plots together
+library(plot3D) #Surface plots
+
+#Don't include code chunks when outputting markdown
+knitr::opts_chunk$set(
+echo=FALSE
+)
+
+```
+
+```{r data prep, message=FALSE, warning=FALSE, echo=F}
+
+#File path
+local_path <- 'C:/Users/roiak/Documents/Damage Project/Rugosity'
+
+full_d <- read_csv(paste0(local_path,"/Data/Final/Full_Data_For_Analyses.csv"))#data file
+
+#cleaning data
+full_d <- full_d %>%
+  #Fixing variables (factors, making sure precipitation is in mm/year)
+  mutate(Soil = factor(Soil),
+         Max_Height = as.numeric(Max_Height),
+         Forest_Age = factor(Forest_Age),
+         MAP = MAP *0.01,
+         Wind_Binary = ifelse(Wind_Binary == 0, "Protected",
+                              ifelse(Wind_Binary == 1, "Exposed",NA))
+         )  %>%
+  #Removing outliers and sites below sea-level
+  filter(CHM > 2 & CHM <40, #getting rid of canopy height outliers
+         Elev_Mean >=0)
+
+#Fixing wind-exposure
+full_d$Wind_Binary <- factor(full_d$Wind_Binary,
+                              levels = c("Protected","Exposed"))
+
+#Creating dataset for each response variable
+height <- full_d %>%
+  dplyr::select(CHM,
+                Forest_Age,
+                MAP,
+                Wind_Binary,
+                Elev_Mean,
+                Slope,
+                Soil,
+                AWS_mean,
+                Hugo_exposure) %>%
+  na.omit(.)
+
+
+rugosity <- full_d %>%
+  dplyr::select(Rugosity,
+                CHM,
+                Forest_Age,
+                MAP,
+                Wind_Binary,
+                Elev_Mean,
+                Slope,
+                Soil,
+                AWS_mean,
+                Hugo_exposure) %>%
+  na.omit(.)
+
+```
+
+# OVERVIEW
+
+### Questions
+
+- **(1)** Does regular exposure to non-hurricane winds reduce canopy structural complexity in tropical forests?  
+- **(2)** To what extent is this effect mediated by climate, topography, substrate, forest age and past disturbances?
+
+### Goals
+
+This script tests whether chronic wind exposure reduces canopy structural complexity across Puerto Rico.
+It does this by running 2 Random-Forest (RF) models for two airborne LiDAR-derived canopy metrics:
+
+- **(1)** Canopy Height
+- **(2)** Canopy Top Rugosity (sd of height along moving windows) - Vertical variation for top of canopy  
+
+### Data
+
+The LiDAR data come from 2016 flights by the USGS, which were then normalized by Lora Murphy of the Cary Institute.
+Lora also calculated a canopy height model (CHM) and top rugosity.
+
+Study sites were selected by stratified sampling randomly across forest age,
+Then creating a required 250m minimum distance between points,
+Then creating 30m buffers around to have a scale that captures a forest stand,
+Then filtering out non-forest points if they contain non-forest elements within the buffer.
+
+This resulted in 20,660 study sites across Puerto Rico for the 30m buffer.
+
+The independent variables used are:
+  - Soil type and soil water availability
+  - Forest age  
+  - Wind exposure (calculated with prevalent directions and using a 30m DEM)
+  - Elevation mean and range (30m USGS DEM)
+  - Slope (30m USGS DEM)
+  - Long term mean annual precipitation 1963-1995 (PRISM)
+  - Past exposure to hurricane Hugo in 1989 and hurricane Georges in 1998 (Boose et al., 2004)
+
+***
+
+# Random Forest Models
+
+Here I run 10 RF models for each response variable.
+Then I summarize variable importance of predictors as the mean and standard error from all 10 models.
+I also report the model error and R$^2$ 
+
+
+## Canopy Height
+
+
+### Running RF 
+
+```{r Canopy Height RF, message=FALSE, warning=FALSE}
+
+#empty matrix to store error and r2 from model
+Height_model<- matrix(nrow=10,ncol=2)
+
+#empty dataframe to store variable importance
+Height_VIMP <- data.frame()
+
+
+#run model 10 times and store results in empty dataframes
+for(i in 1:10){
+
+  #----RUNNING MODEL----#
+  
+  # Run the random forest model with height as response
+  # (making sure data is dataframe not tibble)
+  RF_Height<- rfsrc(CHM~.,
+                            data=as.data.frame(height),
+                            ntree = 5000, #number of trees
+                            importance = "permute") #return VIMP calculated with permutation
+  
+  #----STORING RESULTS----#
+  
+  # R2
+  Height_r2_i <- round(100* (1-mean(RF_Height$err.rate,na.rm=T)/var(RF_Height$yvar, na.rm = TRUE)),2)
+  # error rate
+  Height_error_i <- mean(RF_Height$err.rate,na.rm=T)
+  # storing
+  Height_model[i,] <- c(Height_r2_i,Height_error_i)
+  
+  #----STORING VIMP----#
+  
+  # Get variable importance and organize it
+  Height_vimp_i <- as.data.frame(RF_Height$importance) %>%
+    rownames_to_column(var = "Variable") %>%
+    dplyr::rename(Variable_Importance = `RF_Height$importance`) %>%
+    arrange(Variable_Importance)
+  
+  # storing
+  Height_VIMP = rbind(Height_VIMP,Height_vimp_i)
+
+}
+
+```
+
+
+### Summarizing Results
+
+```{r Height Results Summarize, message=FALSE, warning=FALSE}
+
+# turning matrix of results to dataframe
+Height_model <- as.data.frame(Height_model)
+colnames(Height_model) <- c("R2","Error")
+
+# summarizing
+Height_results <- Height_model %>%
+  mutate(Mean_R2 = round(mean(R2,na.rm=T),2)*0.01,
+         R2_sd = round(sd(R2,na.rm=T),2)*0.01,
+         Mean_OOB_Error = round(mean(Error,na.rm=T),2)*0.01,
+         Error_sd = round(sd(Error,na.rm=T),2)*0.01) %>%
+  distinct(Mean_R2,R2_sd,Mean_OOB_Error,Error_sd)
+
+# summarizing VIMP results
+Height_VIMP_results <-Height_VIMP %>%
+  group_by(Variable) %>%
+  summarize(Mean_VIMP = round(mean(Variable_Importance,na.rm=T),2),
+            VIMP_sd = round(sd(Variable_Importance,na.rm=T),2)) %>%
+  arrange(Mean_VIMP)
+
+
+```
+
+
+### Saving Dataframes of Results
+```{r Height Results Save, message=FALSE, warning=FALSE}
+
+#show results
+Height_results
+Height_VIMP_results
+
+#save results
+write_csv(Height_results,
+          paste0(local_path,"/Data/Final/Height_RF.csv"))
+
+write_csv(Height_VIMP_results,
+          paste0(local_path,"/Data/Final/Height_RF_VIMP.csv"))
+
+#clean
+rm(list=setdiff(ls(), 
+                c("rugosity","local_path","model_data")))
+
+gc()
+
+```
+
+
+***
+
+
+## Canopy Rugosity
+
+### Running RF 
+
+```{r Canopy Rugosity RF, message=FALSE, warning=FALSE}
+
+#empty matrix to store error and r2 from model
+Rugosity_model<- matrix(nrow=10,ncol=2)
+
+#empty dataframe to store variable importance
+Rugosity_VIMP <- data.frame()
+
+
+#run model 10 times and store results in empty dataframes
+for(i in 1:10){
+
+  #----RUNNING MODEL----#
+  
+  # Run the random forest model with rugosity as response
+  # (making sure data is dataframe not tibble)
+  RF_Rugosity<- rfsrc(Rugosity~.,
+                            data=as.data.frame(rugosity),
+                            ntree = 5000, #number of trees
+                            importance = "permute") #return VIMP calculated with permutation
+  
+  #----STORING RESULTS----#
+  
+  # R2
+  Rugosity_r2_i <- round(100* (1-mean(RF_Rugosity$err.rate,na.rm=T)/var(RF_Rugosity$yvar, na.rm = TRUE)),2)
+  # error rate
+  Rugosity_error_i <- mean(RF_Rugosity$err.rate,na.rm=T)
+  # storing
+  Rugosity_model[i,] <- c(Rugosity_r2_i,Rugosity_error_i)
+  
+  #----STORING VIMP----#
+  
+  # Get variable importance and organize it
+  Rugosity_vimp_i <- as.data.frame(RF_Rugosity$importance) %>%
+    rownames_to_column(var = "Variable") %>%
+    dplyr::rename(Variable_Importance = `RF_Rugosity$importance`) %>%
+    arrange(Variable_Importance)
+  
+  # storing
+  Rugosity_VIMP = rbind(Rugosity_VIMP,Rugosity_vimp_i)
+
+}
+
+```
+
+
+### Summarizing Results
+
+```{r Rugosity Result Summarize, message=FALSE, warning=FALSE}
+
+# turning matrix of results to dataframe
+Rugosity_model <- as.data.frame(Rugosity_model)
+colnames(Rugosity_model) <- c("R2","Error")
+
+# summarizing
+Rugosity_results <- Rugosity_model %>%
+  mutate(Mean_R2 = round(mean(R2,na.rm=T),2)*0.01,
+         R2_sd = round(sd(R2,na.rm=T),2)*0.01,
+         Mean_OOB_Error = round(mean(Error,na.rm=T),2)*0.01,
+         Error_sd = round(sd(Error,na.rm=T),2)*0.01) %>%
+  distinct(Mean_R2,R2_sd,Mean_OOB_Error,Error_sd)
+
+# summarizing VIMP results
+Rugosity_VIMP_results <-Rugosity_VIMP %>%
+  group_by(Variable) %>%
+  summarize(Mean_VIMP = round(mean(Variable_Importance,na.rm=T),2),
+            VIMP_sd = round(sd(Variable_Importance,na.rm=T),2)) %>%
+  arrange(Mean_VIMP)
+
+```
+
+
+### Saving Dataframes of Results
+
+```{r Rugosity Results Save, message=FALSE, warning=FALSE}
+
+#show results
+Rugosity_results
+Rugosity_VIMP_results
+
+#save results
+write_csv(Rugosity_results,
+          paste0(local_path,"/Data/Final/Rugosity Model.csv"))
+
+write_csv(Rugosity_VIMP_results,
+          paste0(local_path,"/Data/Final/Rugosity VIMP.csv"))
+
+#clean
+rm(list=ls())
+
+gc()
+
+```

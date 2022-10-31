@@ -1,0 +1,264 @@
+---
+title: "Canopy Structure Manuscript Model Interactions"
+author: "Roí Ankori-Karlinsky"
+date: "5/25/2022"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+    theme: journal
+    fig_width: 9
+    fig_height: 8
+---
+
+
+```{r setup, include=FALSE,echo=FALSE}
+
+# load packages 
+
+#Basic
+library(tidyverse) # Grammar for data manipulation
+library(parallel) # mclapply for multicore processing
+
+#Spatial analysis
+library(sp) #provides object oriented classes for spatial data in R 
+library(sf) #similar to sp
+library(rgdal) # raster analysis
+library(raster) #provides classes and methods for raster datasets
+library(spdplyr) #spatial data manipulation
+
+#Data checking
+library(naniar) # Visualization of missing values
+library(Amelia) # Teting missing columns
+library(corrplot) #correlation plots
+
+#Random Forest
+library(randomForestSRC) # random forests for survival, regression and
+library(pdp) #partial dependence plots
+library(randomForest) #random forest
+library(randomForestExplainer) #unpacking RF results
+library(pre) #Interactions between predictors
+library(iml) #Interactions between predictors
+
+# Visualization
+library(ggRandomForests) # ggplot2 random forest figures
+library(gridExtra) # allows plotting of multiple ggplots in one
+library(grid) #same as above
+library(colorRamps) # Colors for graphing
+library(RColorBrewer) # Colors for graphing
+library(cowplot) #putting plots together
+library(plot3D) #Surface plots
+
+#Don't include code chunks when outputting markdown
+knitr::opts_chunk$set(
+echo=FALSE
+)
+
+```
+
+```{r data prep, message=FALSE, warning=FALSE, echo=F}
+
+#File path
+local_path <- 'C:/Users/roiak/Documents/Damage Project/Rugosity'
+
+full_d <- read_csv(paste0(local_path,"/Data/Final/Full_Data_For_Analyses.csv"))#data file
+
+#cleaning data
+full_d <- full_d %>%
+  #Fixing variables (factors, making sure precipitation is in mm/year)
+  mutate(Soil = factor(Soil),
+         Max_Height = as.numeric(Max_Height),
+         Forest_Age = factor(Forest_Age),
+         MAP = MAP *0.01,
+         Wind_Binary = ifelse(Wind_Binary == 0, "Protected",
+                              ifelse(Wind_Binary == 1, "Exposed",NA))
+         )  %>%
+  #Removing outliers and sites below sea-level
+  filter(CHM > 2 & CHM <40,
+         Elev_Mean >=0)
+
+#Fixing wind-exposure
+full_d$Wind_Binary <- factor(full_d$Wind_Binary,
+                              levels = c("Protected","Exposed"))
+
+#Creating dataset for each response variable
+height <- full_d %>%
+  dplyr::select(CHM,
+                Forest_Age,
+                MAP,
+                Wind_Binary,
+                Elev_Mean,
+                Slope,
+                Soil,
+                AWS_mean) %>%
+  na.omit(.)
+
+
+rugosity <- full_d %>%
+  dplyr::select(Rugosity,
+                CHM,
+                Forest_Age,
+                MAP,
+                Wind_Binary,
+                Elev_Mean,
+                Slope,
+                Soil,
+                AWS_mean) %>%
+  na.omit(.)
+
+```
+
+# OVERVIEW
+
+## Questions
+
+- **(1)** Does regular exposure to non-hurricane winds reduce canopy structural complexity in tropical forests?  
+- **(2)** To what extent is this effect mediated by climate, topography, substrate, forest age and past disturbances?
+
+## Goals
+
+This script checks for Random Forest (RF) model interactions between predictors of:     
+      - **(1)** Canopy Height
+      - **(2)** Canopy Top Rugosity (sd of height along moving windows) - Vertical variation for top of canopy  
+      
+      
+The predictors are:    
+      - Soil type and soil water availability
+      - Forest age  
+      - Wind exposure (calculated with prevalent directions and using a 30m DEM)
+      - Elevation mean and range (30m USGS DEM)
+      - Slope (30m USGS DEM)
+      - Long term mean annual precipitation 1963-1995 (PRISM)
+      - Past exposure to hurricane Hugo in 1989 and hurricane Georges in 1998 (Boose et al., 2004)
+
+## Data
+
+The LiDAR data come from 2016 flights by the USGS, which were then normalized by Lora Murphy of the Cary Institute.
+Lora also calculated a canopy height model (CHM) and top rugosity.
+
+Study sites were selected by stratified sampling randomly across forest age,
+Then creating a required 250m minimum distance between points,
+Then creating 30m buffers around to have a scale that captures a forest stand,
+Then filtering out non-forest points if they contain non-forest elements within the buffer.
+
+This resulted in 20,660 study sites across Puerto Rico for the 30m buffer.
+
+(Thanks Dr. Jazlynn Hall with help for the code!)
+
+
+*** 
+
+# Interactions
+
+Testing for interactions with pre and iml packages
+Calculating the H-statistic 
+Code adapated from Jaz Hall, thanks!
+
+## Height
+
+```{r Height Interactions, message=FALSE, warning=FALSE, fig.height=8, fig.width=14, dpi=600}
+
+#Doing this on a subsample of the data since it's so large
+
+#random number generator
+set.seed(10)
+#Random subsample of data
+interactions.data<- height[sample(nrow(height),
+                                              3000), ]
+#removing NAs
+interactions.data<- na.omit(interactions.data)
+
+#Running interaction model
+interaction_model <- pre::pre(CHM ~ ., 
+                              data=interactions.data[complete.cases(interactions.data),],
+                              verbose=F)
+
+#Check model diagnostics
+summary(interaction_model)
+
+# use the iml package to test interactions 
+# Create a model object the package can recognize
+mod=Predictor$new(interaction_model,
+                  data=interactions.data[-which(names(interactions.data)=="CHM")])
+
+# Measure the interaction strength
+ia = Interaction$new(mod)
+
+#make naming better
+ia$results <- ia$results %>%
+  mutate(.feature = case_when(
+    .feature == "CHM" ~ "Canopy Height (m)",
+    .feature == "MAP" ~ "Mean Annual Precipitation (mm/yr)",
+    .feature == "Forest_Age" ~ "Forest Age",
+    .feature == "Wind_Binary" ~ "Chronic Wind-Exposure",
+    .feature == "Elev_Mean" ~ "Elevation (m)",
+    .feature == "AWS_mean" ~ "Available Soil Water Storage (cm)",
+    .feature == "Slope" ~ "Slope (degrees)",
+    .feature == "Soil" ~ "Soil Type"
+    ))
+
+#save results
+write_csv(ia$results,
+          paste0(local_path,"/Data/Final/Height Interaction.csv"))
+
+#Remove items and clean space
+rm(ia,mod,interaction_model,interactions.data)
+gc()
+
+```
+
+***
+
+## Rugosity
+
+```{r Rugosity Interactions, message=FALSE, warning=FALSE, fig.height=8, fig.width=9, dpi=600}
+
+#Doing this on a subsample of the data since it's so large
+
+#random number generator
+set.seed(10)
+#Random subsample of data
+interactions.data<- rugosity[sample(nrow(rugosity),
+                                              3000), ]
+#removing NAs
+interactions.data<- na.omit(interactions.data)
+
+#Running interaction model
+interaction_model <- pre::pre(Rugosity ~ ., 
+                              data=interactions.data[complete.cases(interactions.data),],
+                              verbose=F)
+
+#Check
+summary(interaction_model)
+
+# use the iml package to test interactions 
+# Create a model object the package can recognize
+mod=Predictor$new(interaction_model,
+                  data=interactions.data[-which(names(interactions.data)=="Rugosity")])
+
+# Measure the interaction strength
+ia = Interaction$new(mod)
+
+#make naming better
+ia$results <- ia$results %>%
+  mutate(.feature = case_when(
+    .feature == "CHM" ~ "Canopy Height (m)",
+    .feature == "MAP" ~ "Mean Annual Precipitation (mm/yr)",
+    .feature == "Forest_Age" ~ "Forest Age",
+    .feature == "Wind_Binary" ~ "Chronic Wind-Exposure",
+    .feature == "Elev_Mean" ~ "Elevation (m)",
+    .feature == "AWS_mean" ~ "Available Soil Water Storage (cm)",
+    .feature == "Slope" ~ "Slope (degrees)",
+    .feature == "Soil" ~ "Soil Type"
+    ))
+
+#save results
+write_csv(ia$results,
+          paste0(local_path,"/Data/Final/Rugosity Interaction.csv"))
+
+
+#Remove items and clean space
+rm(list=ls())
+gc()
+```
