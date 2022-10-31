@@ -7,7 +7,7 @@ This dissertation focuses on the relationship between tree architecture, canopy 
 
 When referring to canopy structure and structural complexity, there are two salient metrics related to ecosystem function:
 
-<img src="/Figures/Canopy metrics.png" height="500">
+<p align="center"><img src="/Figures/Canopy metrics.png" height="500">
 
 <p align="center">Drawing by Nina Berinstein</p> 
 
