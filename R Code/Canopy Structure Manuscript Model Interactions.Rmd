@@ -50,6 +50,9 @@ library(RColorBrewer) # Colors for graphing
 library(cowplot) #putting plots together
 library(plot3D) #Surface plots
 
+#Making sure R is utilizing all available RAM
+memory.limit(size=50000)
+
 #Don't include code chunks when outputting markdown
 knitr::opts_chunk$set(
 echo=FALSE
@@ -66,32 +69,32 @@ full_d <- read_csv(paste0(local_path,"/Data/Final/Full_Data_For_Analyses.csv"))#
 
 #cleaning data
 full_d <- full_d %>%
+  filter(Soil!="Water") %>%
   #Fixing variables (factors, making sure precipitation is in mm/year)
   mutate(Soil = factor(Soil),
          Max_Height = as.numeric(Max_Height),
          Forest_Age = factor(Forest_Age),
          MAP = MAP *0.01,
          Wind_Binary = ifelse(Wind_Binary == 0, "Protected",
-                              ifelse(Wind_Binary == 1, "Exposed",NA))
+                              ifelse(Wind_Binary == 1, "Exposed",NA)),
+         Wind_Exposure = round(Wind_Exposure,2),
+         Wind_sd = round(Wind_sd,2)
          )  %>%
   #Removing outliers and sites below sea-level
-  filter(CHM > 2 & CHM <40,
+  filter(CHM > 2 & CHM <40, #getting rid of canopy height outliers
          Elev_Mean >=0)
-
-#Fixing wind-exposure
-full_d$Wind_Binary <- factor(full_d$Wind_Binary,
-                              levels = c("Protected","Exposed"))
 
 #Creating dataset for each response variable
 height <- full_d %>%
   dplyr::select(CHM,
                 Forest_Age,
                 MAP,
-                Wind_Binary,
+                Wind_Exposure,
                 Elev_Mean,
                 Slope,
                 Soil,
-                AWS_mean) %>%
+                AWS_mean,
+                Hugo_exposure) %>%
   na.omit(.)
 
 
@@ -100,11 +103,12 @@ rugosity <- full_d %>%
                 CHM,
                 Forest_Age,
                 MAP,
-                Wind_Binary,
+                Wind_Exposure,
                 Elev_Mean,
                 Slope,
                 Soil,
-                AWS_mean) %>%
+                AWS_mean,
+                Hugo_exposure) %>%
   na.omit(.)
 
 ```
@@ -191,7 +195,7 @@ ia$results <- ia$results %>%
     .feature == "CHM" ~ "Canopy Height (m)",
     .feature == "MAP" ~ "Mean Annual Precipitation (mm/yr)",
     .feature == "Forest_Age" ~ "Forest Age",
-    .feature == "Wind_Binary" ~ "Chronic Wind-Exposure",
+    .feature == "Wind_Exposure" ~ "Chronic Wind-Exposure",
     .feature == "Elev_Mean" ~ "Elevation (m)",
     .feature == "AWS_mean" ~ "Available Soil Water Storage (cm)",
     .feature == "Slope" ~ "Slope (degrees)",
@@ -246,7 +250,7 @@ ia$results <- ia$results %>%
     .feature == "CHM" ~ "Canopy Height (m)",
     .feature == "MAP" ~ "Mean Annual Precipitation (mm/yr)",
     .feature == "Forest_Age" ~ "Forest Age",
-    .feature == "Wind_Binary" ~ "Chronic Wind-Exposure",
+    .feature == "Wind_Exposure" ~ "Chronic Wind-Exposure",
     .feature == "Elev_Mean" ~ "Elevation (m)",
     .feature == "AWS_mean" ~ "Available Soil Water Storage (cm)",
     .feature == "Slope" ~ "Slope (degrees)",

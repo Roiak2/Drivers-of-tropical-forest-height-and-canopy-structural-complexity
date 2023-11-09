@@ -1,0 +1,254 @@
+---
+title: "Canopy Structure Manuscript RF Analyses"
+author: "Roi A.K."
+date: "2023-03-13"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+    theme: journal
+    fig_width: 9
+    fig_height: 8
+---
+
+
+```{r setup, include=FALSE,echo=FALSE}
+
+# load packages 
+
+#Basic
+library(tidyverse) # Grammar for data manipulation
+library(parallel) # mclapply for multicore processing
+library(vegan)
+
+#Spatial analysis
+library(sp) #provides object oriented classes for spatial data in R 
+library(sf) #similar to sp
+library(rgdal) # raster analysis
+library(raster) #provides classes and methods for raster datasets
+library(spdplyr) #spatial data manipulation
+
+#Data checking
+library(naniar) # Visualization of missing values
+library(Amelia) # Teting missing columns
+library(corrplot) #correlation plots
+
+#Random Forest
+library(randomForestSRC) # random forests for survival, regression and
+library(pdp) #partial dependence plots
+library(randomForest) #random forest
+library(randomForestExplainer) #unpacking RF results
+library(pre) #Interactions between predictors
+library(iml) #Interactions between predictors
+
+# Visualization
+library(ggRandomForests) # ggplot2 random forest figures
+library(gridExtra) # allows plotting of multiple ggplots in one
+library(grid) #same as above
+library(colorRamps) # Colors for graphing
+library(RColorBrewer) # Colors for graphing
+library(cowplot) #putting plots together
+library(plot3D) #Surface plots
+
+#Making sure R is utilizing all available RAM
+memory.limit(size=50000)
+
+#File path
+local_path <- 'C:/Users/roiak/Documents/Damage Project/Rugosity'
+
+#Don't include code chunks when outputting markdown
+knitr::opts_chunk$set(
+  echo=FALSE,
+  dev = 'png',
+  dpi=600,
+  fig.path = (paste0(local_path,"/Figures/Canopy Structure Manuscript RF Mar 2023/")
+)
+)
+
+```
+
+```{r data prep, message=FALSE, warning=FALSE, echo=F}
+
+
+#load data
+full_d <- read_csv(paste0(local_path,"/Data/Final/Full_Data_For_Analyses.csv"))#data file
+
+#cleaning data
+full_d <- full_d %>%
+  filter(Soil!="Water") %>%
+  #Fixing variables (factors, making sure precipitation is in mm/year)
+  mutate(Soil = factor(Soil),
+         Max_Height = as.numeric(Max_Height),
+         Forest_Age = factor(Forest_Age),
+         MAP = MAP *0.01,
+         Wind_Binary = ifelse(Wind_Binary == 0, "Protected",
+                              ifelse(Wind_Binary == 1, "Exposed",NA)),
+         Wind_Exposure = round(Wind_Exposure,2),
+         Wind_sd = round(Wind_sd,2)
+         )  %>%
+  #Removing outliers and sites below sea-level
+  filter(CHM > 2 & CHM <40, #getting rid of canopy height outliers
+         Elev_Mean >=0)
+
+#Creating dataset for each response variable
+height <- full_d %>%
+  dplyr::select(CHM,
+                Forest_Age,
+                MAP,
+                Wind_Exposure,
+                Elev_Mean,
+                Slope,
+                Soil,
+                AWS_mean,
+                Hugo_exposure) %>%
+  na.omit(.)
+
+
+rugosity <- full_d %>%
+  dplyr::select(Rugosity,
+                CHM,
+                Forest_Age,
+                MAP,
+                Wind_Exposure,
+                Elev_Mean,
+                Slope,
+                Soil,
+                AWS_mean,
+                Hugo_exposure) %>%
+  na.omit(.)
+
+```
+
+# OVERVIEW
+
+### Questions
+
+- **(1)** Does regular exposure to non-hurricane winds reduce canopy structural complexity in tropical forests?  
+- **(2)** To what extent is this effect mediated by climate, topography, substrate, forest age and past disturbances?
+
+### Goals
+
+This script tests whether chronic wind exposure reduces canopy structural complexity across Puerto Rico.
+It does this by running 2 Random-Forest (RF) models for two airborne LiDAR-derived canopy metrics:
+
+- **(1)** Canopy Height
+- **(2)** Canopy Top Rugosity (sd of height along moving windows) - Vertical variation for top of canopy  
+
+### Data
+
+The LiDAR data come from 2016 flights by the USGS, which were then normalized by Lora Murphy of the Cary Institute.
+Lora also calculated a canopy height model (CHM) and top rugosity.
+
+Study sites were selected by stratified sampling randomly across forest age,
+Then creating a required 250m minimum distance between points,
+Then creating 30m buffers around to have a scale that captures a forest stand,
+Then filtering out non-forest points if they contain non-forest elements within the buffer.
+
+This resulted in 20,660 study sites across Puerto Rico for the 30m buffer.
+
+The independent variables used are:
+  - Soil type and soil water availability
+  - Forest age  
+  - Wind exposure (calculated with prevalent directions and using a 30m DEM)
+  - Elevation mean and range (30m USGS DEM)
+  - Slope (30m USGS DEM)
+  - Long term mean annual precipitation 1963-1995 (PRISM)
+  - Past exposure to hurricane Hugo in 1989 and hurricane Georges in 1998 (Boose et al., 2004)
+
+***
+
+# Random Forest Models
+
+Here I run 10 RF models for each response variable.
+Then I summarize variable importance of predictors as the mean and standard error from all 10 models.
+I also report the model error and R$^2$ 
+
+
+## Canopy Height
+
+
+### Running RF 
+
+```{r Canopy Height RF, message=FALSE, warning=FALSE}
+
+#running height RF
+Height_RF <- randomForest(CHM ~ .,
+                          data=height,
+                          ntree = 500,
+                          importance = T)
+
+Height_RF
+
+```
+
+
+### Variable importance
+
+```{r Height VIMP, message=FALSE, warning=FALSE}
+
+#variable importance plot
+varImpPlot(Height_RF) 
+
+```
+
+### Predictions
+
+
+```{r Height explain, message=FALSE, warning=FALSE}
+
+explain_forest(Height_RF, interactions = TRUE, data = height)
+
+gc()
+
+```
+
+```{r clean height}
+rm(Height_RF,height)
+gc()
+
+```
+
+
+
+
+***
+
+
+## Canopy Rugosity
+
+### Running RF 
+
+```{r Canopy Rugosity RF, message=FALSE, warning=FALSE}
+
+#running rugosity RF
+Rugosity_RF <- randomForest(Rugosity ~ .,
+                          data=rugosity,
+                          ntree = 500,
+                          importance = T)
+
+Rugosity_RF
+gc()
+
+```
+
+
+### Variable importance
+
+```{r Rugosity VIMP, message=FALSE, warning=FALSE}
+
+#variable importance plot
+varImpPlot(Rugosity_RF) 
+gc()
+
+```
+
+### Predictions
+
+
+```{r Rugosity explain, message=FALSE, warning=FALSE}
+
+explain_forest(Rugosity_RF, interactions = TRUE, data = rugosity)
+
+```
+

@@ -1,7 +1,7 @@
 ---
 title: "Canopy Structure Manuscript Analyses"
 author: "Roí Ankori-Karlinsky"
-date: "5/9/2022"
+date: "3/7/2023"
 output:
   html_document: 
     toc: yes
@@ -51,6 +51,9 @@ library(RColorBrewer) # Colors for graphing
 library(cowplot) #putting plots together
 library(plot3D) #Surface plots
 
+#Making sure R is utilizing all available RAM
+memory.limit(size=50000)
+
 #Don't include code chunks when outputting markdown
 knitr::opts_chunk$set(
 echo=FALSE
@@ -67,21 +70,18 @@ full_d <- read_csv(paste0(local_path,"/Data/Final/Full_Data_For_Analyses.csv"))#
 
 #cleaning data
 full_d <- full_d %>%
+  filter(Soil!="Water") %>%
   #Fixing variables (factors, making sure precipitation is in mm/year)
   mutate(Soil = factor(Soil),
          Max_Height = as.numeric(Max_Height),
          Forest_Age = factor(Forest_Age),
          MAP = MAP *0.01,
-         Wind_Binary = ifelse(Wind_Binary == 0, "Protected",
-                              ifelse(Wind_Binary == 1, "Exposed",NA))
+         Wind_Binary = factor(Wind_Binary,
+                              levels=c(0,1))
          )  %>%
   #Removing outliers and sites below sea-level
   filter(CHM > 2 & CHM <40, #getting rid of canopy height outliers
          Elev_Mean >=0)
-
-#Fixing wind-exposure
-full_d$Wind_Binary <- factor(full_d$Wind_Binary,
-                              levels = c("Protected","Exposed"))
 
 #Creating dataset for each response variable
 height <- full_d %>%
@@ -244,10 +244,10 @@ Height_VIMP_results
 
 #save results
 write_csv(Height_results,
-          paste0(local_path,"/Data/Final/Height_RF.csv"))
+          paste0(local_path,"/Data/Final/Height_RF_2023.csv"))
 
 write_csv(Height_VIMP_results,
-          paste0(local_path,"/Data/Final/Height_RF_VIMP.csv"))
+          paste0(local_path,"/Data/Final/Height_RF_VIMP_2023.csv"))
 
 #clean
 rm(list=setdiff(ls(), 
@@ -347,10 +347,10 @@ Rugosity_VIMP_results
 
 #save results
 write_csv(Rugosity_results,
-          paste0(local_path,"/Data/Final/Rugosity Model.csv"))
+          paste0(local_path,"/Data/Final/Rugosity_RF_2023.csv"))
 
 write_csv(Rugosity_VIMP_results,
-          paste0(local_path,"/Data/Final/Rugosity VIMP.csv"))
+          paste0(local_path,"/Data/Final/Rugosity_VIMP_2023.csv"))
 
 #clean
 rm(list=ls())

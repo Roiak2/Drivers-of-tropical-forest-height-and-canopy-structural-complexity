@@ -48,13 +48,13 @@ library(spdplyr) #spatial data manipulation
 local_path <- 'C:/Users/roiak/Documents/Damage Project/Rugosity'
 
 #Directory for GWA data
-gwa_dir<- paste0(local_path,'/Data/Wind Models/Global Wind Atlas CFDDA 100m Res Data/')
+gwa_dir<- paste0(local_path,'/Data/Final/Wind Models/Global Wind Atlas CFDDA 100m Res Data/')
 
 #Directory for weather station data
-station_dir <- paste0(local_path,'/Data/Wind Models/Iowa State Wind Station Data/')
+station_dir <- paste0(local_path,'/Data/Final/Wind Models/Iowa State Wind Station Data/')
 
 #Where local shapefiles are
-shp_dir <- 'C:/Users/roiak/Documents/Damage Project/Rugosity/Data/Shapefiles'
+shp_dir <- 'C:/Users/roiak/Documents/Damage Project/Rugosity/Final/Data/Shapefiles'
 
 #Where DEM is for exposure calculation
 dem_dir <- paste0(shp_dir,"/DEM")
