@@ -1,7 +1,7 @@
 # Water, Wind, & Time - Drivers of tropical forest height and canopy structural complexity
 
 ## Overview
-This repository contains code and data for chapter 2 of my dissertation, which is to be published in *Ecology* soon under Ankori-Karlinsky et al., 2022. 
+This repository contains code and data for chapter 2 of my dissertation, which is to be published in *Ecosystems* soon under Ankori-Karlinsky et al., 2023. 
 
 This dissertation focuses on the relationship between tree architecture, canopy structure, and chronic wind-exposure.
 
